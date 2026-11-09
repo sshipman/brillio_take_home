@@ -202,6 +202,7 @@ public class ListingSearchServiceTest {
             HttpResponse<String> resp1 = client.send(req1, HttpResponse.BodyHandlers.ofString());
             assertEquals(400, resp1.statusCode());
             assertTrue(resp1.body().contains("minPrice cannot be greater than maxPrice"));
+            assertTrue(resp1.body().contains("\"fields\":[\"minPrice\",\"maxPrice\"]"));
 
             // pageSize <= 0
             HttpRequest req2 = HttpRequest.newBuilder(
@@ -210,6 +211,7 @@ public class ListingSearchServiceTest {
             HttpResponse<String> resp2 = client.send(req2, HttpResponse.BodyHandlers.ofString());
             assertEquals(400, resp2.statusCode());
             assertTrue(resp2.body().contains("pageSize must be greater than zero"));
+            assertTrue(resp2.body().contains("\"fields\":[\"pageSize\"]"));
 
             // non-numeric minPrice
             HttpRequest req3 = HttpRequest.newBuilder(
@@ -218,6 +220,7 @@ public class ListingSearchServiceTest {
             HttpResponse<String> resp3 = client.send(req3, HttpResponse.BodyHandlers.ofString());
             assertEquals(400, resp3.statusCode());
             assertTrue(resp3.body().contains("Invalid numeric value"));
+            assertTrue(resp3.body().contains("\"fields\":[\"minPrice\"]"));
         } finally {
             app.stop();
         }

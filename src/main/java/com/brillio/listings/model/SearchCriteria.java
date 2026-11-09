@@ -16,28 +16,28 @@ public record SearchCriteria(
 
     public void validate() {
         if (minPrice != null && (!Double.isFinite(minPrice) || minPrice < 0)) {
-            throw new IllegalArgumentException("minPrice must be a non-negative number.");
+            throw new ValidationException("minPrice must be a non-negative number.", "minPrice");
         }
         if (maxPrice != null && (!Double.isFinite(maxPrice) || maxPrice < 0)) {
-            throw new IllegalArgumentException("maxPrice must be a non-negative number.");
+            throw new ValidationException("maxPrice must be a non-negative number.", "maxPrice");
         }
         if (minPrice != null && maxPrice != null && minPrice > maxPrice) {
-            throw new IllegalArgumentException("minPrice cannot be greater than maxPrice.");
+            throw new ValidationException("minPrice cannot be greater than maxPrice.", "minPrice", "maxPrice");
         }
         if (minBedrooms != null && minBedrooms < 0) {
-            throw new IllegalArgumentException("minBedrooms must be a non-negative integer.");
+            throw new ValidationException("minBedrooms must be a non-negative integer.", "minBedrooms");
         }
         if (targetBudget != null && (!Double.isFinite(targetBudget) || targetBudget <= 0)) {
-            throw new IllegalArgumentException("targetBudget must be greater than zero.");
+            throw new ValidationException("targetBudget must be greater than zero.", "targetBudget");
         }
         if (page < 1) {
-            throw new IllegalArgumentException("page must be at least 1.");
+            throw new ValidationException("page must be at least 1.", "page");
         }
         if (pageSize <= 0) {
-            throw new IllegalArgumentException("pageSize must be greater than zero.");
+            throw new ValidationException("pageSize must be greater than zero.", "pageSize");
         }
         if (pageSize > MAX_PAGE_SIZE) {
-            throw new IllegalArgumentException("pageSize cannot exceed " + MAX_PAGE_SIZE + ".");
+            throw new ValidationException("pageSize cannot exceed " + MAX_PAGE_SIZE + ".", "pageSize");
         }
     }
 }

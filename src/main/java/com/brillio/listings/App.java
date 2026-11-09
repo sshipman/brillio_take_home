@@ -2,12 +2,14 @@ package com.brillio.listings;
 
 import com.brillio.listings.db.SqliteListingRepository;
 import com.brillio.listings.model.SearchCriteria;
+import com.brillio.listings.model.ValidationException;
 import com.brillio.listings.service.ListingSearchService;
 import com.brillio.listings.service.ScoringService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.Map;
 
 public class App {
@@ -19,8 +21,18 @@ public class App {
             config.bundledPlugins.enableCors(cors -> cors.addRule(it -> it.anyHost()));
         });
 
+        app.exception(ValidationException.class, (e, ctx) -> {
+            ctx.status(400).json(Map.of(
+                "error", e.getMessage(),
+                "fields", e.getFields()
+            ));
+        });
+
         app.exception(IllegalArgumentException.class, (e, ctx) -> {
-            ctx.status(400).json(Map.of("error", e.getMessage()));
+            ctx.status(400).json(Map.of(
+                "error", e.getMessage(),
+                "fields", List.of()
+            ));
         });
 
         app.get("/api/health", ctx -> ctx.json(Map.of("status", "ok")));
@@ -63,7 +75,7 @@ public class App {
         try {
             return Double.parseDouble(raw.trim());
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid numeric value for '" + paramName + "': " + raw);
+            throw new ValidationException("Invalid numeric value for '" + paramName + "': " + raw, paramName);
         }
     }
 
@@ -75,7 +87,7 @@ public class App {
         try {
             return Integer.parseInt(raw.trim());
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid integer value for '" + paramName + "': " + raw);
+            throw new ValidationException("Invalid integer value for '" + paramName + "': " + raw, paramName);
         }
     }
 

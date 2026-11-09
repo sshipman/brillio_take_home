@@ -8,6 +8,7 @@ import {
   Outlet,
   useNavigate,
 } from '@tanstack/react-router'
+import './styles.css'
 
 export interface ScoredListing {
   id: string
@@ -49,10 +50,10 @@ export interface ListingSearchParams {
 
 const rootRoute = createRootRoute({
   component: () => (
-    <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 1024, margin: '0 auto', padding: 24, color: '#1f2937' }}>
-      <header style={{ marginBottom: 20, borderBottom: '1px solid #e5e7eb', paddingBottom: 12 }}>
+    <div style={{ fontFamily: 'var(--font-family-base)', maxWidth: 1024, margin: '0 auto', padding: 24, color: 'var(--color-text-primary)' }}>
+      <header style={{ marginBottom: 20, borderBottom: 'var(--border-subtle)', paddingBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 24 }}>Property Listing Search</h1>
-        <p style={{ margin: '4px 0 0', color: '#4b5563', fontSize: 14 }}>
+        <p style={{ margin: '4px 0 0', color: 'var(--color-text-muted)', fontSize: 14 }}>
           Filter listings across MLS feeds and rank by budget proximity and recency
         </p>
       </header>
@@ -109,6 +110,11 @@ function ListingSearchPage() {
   const [data, setData] = useState<PagedResult<ScoredListing> | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
+  const [errorFields, setErrorFields] = useState<string[]>([])
+
+  const clearFieldError = (fieldName: string) => {
+    setErrorFields((prev) => (prev.includes(fieldName) ? prev.filter((f) => f !== fieldName) : prev))
+  }
 
   useEffect(() => {
     setMinPrice(search.minPrice ?? '')
@@ -133,6 +139,7 @@ function ListingSearchPage() {
     async function fetchListings() {
       setLoading(true)
       setError(null)
+      setErrorFields([])
       try {
         const params = new URLSearchParams()
         if (search.minPrice) params.set('minPrice', search.minPrice)
@@ -151,6 +158,7 @@ function ListingSearchPage() {
         const body = await response.json()
         if (!response.ok) {
           setError(body?.error || `Request failed with status ${response.status}`)
+          setErrorFields(Array.isArray(body?.fields) ? body.fields : [])
           setData(null)
           return
         }
@@ -158,6 +166,7 @@ function ListingSearchPage() {
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === 'AbortError') return
         setError(err instanceof Error ? err.message : 'Unable to connect to backend API.')
+        setErrorFields([])
         setData(null)
       } finally {
         if (!controller.signal.aborted) {
@@ -220,31 +229,36 @@ function ListingSearchPage() {
     })
   }
 
-  const inputStyle: React.CSSProperties = {
-    padding: '6px 8px',
-    border: '1px solid #d1d5db',
-    borderRadius: 4,
-    fontSize: 14,
-    width: '100%',
-    boxSizing: 'border-box',
+  const getInputStyle = (fieldName: string): React.CSSProperties => {
+    const isInvalid = errorFields.includes(fieldName)
+    return {
+      padding: '6px 8px',
+      border: isInvalid ? 'var(--border-input-invalid)' : 'var(--border-control)',
+      backgroundColor: isInvalid ? 'var(--color-error-bg)' : 'var(--color-surface-card)',
+      borderRadius: 'var(--radius-control)',
+      fontSize: 14,
+      width: '100%',
+      boxSizing: 'border-box',
+    }
   }
 
-  const labelStyle: React.CSSProperties = {
+  const getLabelStyle = (fieldName: string): React.CSSProperties => ({
     display: 'flex',
     flexDirection: 'column',
     gap: 4,
     fontSize: 13,
     fontWeight: 600,
-  }
+    color: errorFields.includes(fieldName) ? 'var(--color-error-label)' : 'var(--color-text-primary)',
+  })
 
   return (
     <div>
       <form
         onSubmit={handleSubmit}
         style={{
-          background: '#f9fafb',
-          border: '1px solid #e5e7eb',
-          borderRadius: 6,
+          background: 'var(--color-surface-subtle)',
+          border: 'var(--border-subtle)',
+          borderRadius: 'var(--radius-panel)',
           padding: 16,
           marginBottom: 20,
         }}
@@ -257,79 +271,107 @@ function ListingSearchPage() {
             marginBottom: 14,
           }}
         >
-          <label style={labelStyle}>
+          <label style={getLabelStyle('minPrice')}>
             Min Price ($)
             <input
               type="number"
               placeholder="e.g. 400000"
               value={minPrice}
-              onChange={(e) => setMinPrice(e.target.value)}
-              style={inputStyle}
+              aria-invalid={errorFields.includes('minPrice')}
+              onChange={(e) => {
+                setMinPrice(e.target.value)
+                clearFieldError('minPrice')
+              }}
+              style={getInputStyle('minPrice')}
             />
           </label>
 
-          <label style={labelStyle}>
+          <label style={getLabelStyle('maxPrice')}>
             Max Price ($)
             <input
               type="number"
               placeholder="e.g. 550000"
               value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value)}
-              style={inputStyle}
+              aria-invalid={errorFields.includes('maxPrice')}
+              onChange={(e) => {
+                setMaxPrice(e.target.value)
+                clearFieldError('maxPrice')
+              }}
+              style={getInputStyle('maxPrice')}
             />
           </label>
 
-          <label style={labelStyle}>
+          <label style={getLabelStyle('minBedrooms')}>
             Min Bedrooms
             <input
               type="number"
               placeholder="e.g. 3"
               value={minBedrooms}
-              onChange={(e) => setMinBedrooms(e.target.value)}
-              style={inputStyle}
+              aria-invalid={errorFields.includes('minBedrooms')}
+              onChange={(e) => {
+                setMinBedrooms(e.target.value)
+                clearFieldError('minBedrooms')
+              }}
+              style={getInputStyle('minBedrooms')}
             />
           </label>
 
-          <label style={labelStyle}>
+          <label style={getLabelStyle('city')}>
             City
             <input
               type="text"
               placeholder="e.g. Springfield"
               value={city}
-              onChange={(e) => setCity(e.target.value)}
-              style={inputStyle}
+              aria-invalid={errorFields.includes('city')}
+              onChange={(e) => {
+                setCity(e.target.value)
+                clearFieldError('city')
+              }}
+              style={getInputStyle('city')}
             />
           </label>
 
-          <label style={labelStyle}>
+          <label style={getLabelStyle('keyword')}>
             Description Keyword
             <input
               type="text"
               placeholder="e.g. metro, fenced"
               value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              style={inputStyle}
+              aria-invalid={errorFields.includes('keyword')}
+              onChange={(e) => {
+                setKeyword(e.target.value)
+                clearFieldError('keyword')
+              }}
+              style={getInputStyle('keyword')}
             />
           </label>
 
-          <label style={labelStyle}>
+          <label style={getLabelStyle('targetBudget')}>
             Target Budget ($ - Ranking)
             <input
               type="number"
               placeholder="e.g. 475000"
               value={targetBudget}
-              onChange={(e) => setTargetBudget(e.target.value)}
-              style={inputStyle}
+              aria-invalid={errorFields.includes('targetBudget')}
+              onChange={(e) => {
+                setTargetBudget(e.target.value)
+                clearFieldError('targetBudget')
+              }}
+              style={getInputStyle('targetBudget')}
             />
           </label>
 
-          <label style={labelStyle}>
+          <label style={getLabelStyle('pageSize')}>
             Page Size
             <input
               type="number"
               value={pageSize}
-              onChange={(e) => setPageSize(e.target.value)}
-              style={inputStyle}
+              aria-invalid={errorFields.includes('pageSize')}
+              onChange={(e) => {
+                setPageSize(e.target.value)
+                clearFieldError('pageSize')
+              }}
+              style={getInputStyle('pageSize')}
             />
           </label>
         </div>
@@ -339,10 +381,10 @@ function ListingSearchPage() {
             type="submit"
             style={{
               padding: '8px 16px',
-              background: '#2563eb',
-              color: '#ffffff',
+              background: 'var(--color-primary)',
+              color: 'var(--color-text-inverse)',
               border: 'none',
-              borderRadius: 4,
+              borderRadius: 'var(--radius-control)',
               fontWeight: 600,
               cursor: 'pointer',
             }}
@@ -354,10 +396,10 @@ function ListingSearchPage() {
             onClick={handleReset}
             style={{
               padding: '8px 16px',
-              background: '#ffffff',
-              color: '#374151',
-              border: '1px solid #d1d5db',
-              borderRadius: 4,
+              background: 'var(--color-surface-card)',
+              color: 'var(--color-text-secondary)',
+              border: 'var(--border-control)',
+              borderRadius: 'var(--radius-control)',
               cursor: 'pointer',
             }}
           >
@@ -367,7 +409,7 @@ function ListingSearchPage() {
       </form>
 
       {loading && (
-        <div role="status" style={{ padding: 16, color: '#4b5563' }}>
+        <div role="status" style={{ padding: 16, color: 'var(--color-text-muted)' }}>
           Loading listings...
         </div>
       )}
@@ -377,10 +419,10 @@ function ListingSearchPage() {
           role="alert"
           style={{
             padding: 14,
-            background: '#fef2f2',
-            border: '1px solid #f87171',
-            color: '#991b1b',
-            borderRadius: 6,
+            background: 'var(--color-error-bg)',
+            border: 'var(--border-alert-error)',
+            color: 'var(--color-error-text)',
+            borderRadius: 'var(--radius-panel)',
             marginBottom: 16,
           }}
         >
@@ -394,10 +436,10 @@ function ListingSearchPage() {
           style={{
             padding: 24,
             textAlign: 'center',
-            background: '#f9fafb',
-            border: '1px solid #e5e7eb',
-            borderRadius: 6,
-            color: '#4b5563',
+            background: 'var(--color-surface-subtle)',
+            border: 'var(--border-subtle)',
+            borderRadius: 'var(--radius-panel)',
+            color: 'var(--color-text-muted)',
           }}
         >
           No listings matched your search criteria
@@ -414,7 +456,7 @@ function ListingSearchPage() {
               alignItems: 'center',
               marginBottom: 12,
               fontSize: 14,
-              color: '#4b5563',
+              color: 'var(--color-text-muted)',
             }}
           >
             <span>
@@ -428,29 +470,29 @@ function ListingSearchPage() {
               <div
                 key={`${item.source}-${item.id}`}
                 style={{
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 6,
+                  border: 'var(--border-subtle)',
+                  borderRadius: 'var(--radius-panel)',
                   padding: 14,
-                  background: '#ffffff',
+                  background: 'var(--color-surface-card)',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
                   <div>
                     <strong style={{ fontSize: 17 }}>{item.address}</strong>
-                    <span style={{ marginLeft: 8, color: '#4b5563', fontSize: 14 }}>
+                    <span style={{ marginLeft: 8, color: 'var(--color-text-muted)', fontSize: 14 }}>
                       {item.city}, {item.state} {item.zip}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 18, fontWeight: 700, color: '#111827' }}>
+                    <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text-strong)' }}>
                       ${item.price.toLocaleString()}
                     </span>
                     <span
                       style={{
-                        background: '#eff6ff',
-                        color: '#1d4ed8',
-                        border: '1px solid #bfdbfe',
-                        borderRadius: 4,
+                        background: 'var(--color-badge-bg)',
+                        color: 'var(--color-badge-text)',
+                        border: 'var(--border-badge)',
+                        borderRadius: 'var(--radius-control)',
                         padding: '2px 8px',
                         fontSize: 13,
                         fontWeight: 600,
@@ -461,7 +503,7 @@ function ListingSearchPage() {
                   </div>
                 </div>
 
-                <div style={{ marginTop: 8, fontSize: 13, color: '#374151', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ marginTop: 8, fontSize: 13, color: 'var(--color-text-secondary)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                   <span>
                     <strong>Bedrooms:</strong> {item.bedrooms}
                   </span>
@@ -482,7 +524,7 @@ function ListingSearchPage() {
                   </span>
                 </div>
 
-                <p style={{ margin: '8px 0 0', fontSize: 14, color: '#4b5563' }}>{item.description}</p>
+                <p style={{ margin: '8px 0 0', fontSize: 14, color: 'var(--color-text-muted)' }}>{item.description}</p>
               </div>
             ))}
           </div>
@@ -494,7 +536,7 @@ function ListingSearchPage() {
               alignItems: 'center',
               marginTop: 16,
               paddingTop: 12,
-              borderTop: '1px solid #e5e7eb',
+              borderTop: 'var(--border-subtle)',
             }}
           >
             <button
@@ -503,10 +545,10 @@ function ListingSearchPage() {
               onClick={() => goToPage(data.page - 1)}
               style={{
                 padding: '6px 14px',
-                border: '1px solid #d1d5db',
-                borderRadius: 4,
-                background: data.page <= 1 ? '#f3f4f6' : '#ffffff',
-                color: data.page <= 1 ? '#9ca3af' : '#111827',
+                border: 'var(--border-control)',
+                borderRadius: 'var(--radius-control)',
+                background: data.page <= 1 ? 'var(--color-surface-disabled)' : 'var(--color-surface-card)',
+                color: data.page <= 1 ? 'var(--color-text-disabled)' : 'var(--color-text-strong)',
                 cursor: data.page <= 1 ? 'not-allowed' : 'pointer',
               }}
             >
@@ -523,10 +565,10 @@ function ListingSearchPage() {
               onClick={() => goToPage(data.page + 1)}
               style={{
                 padding: '6px 14px',
-                border: '1px solid #d1d5db',
-                borderRadius: 4,
-                background: data.page >= data.totalPages ? '#f3f4f6' : '#ffffff',
-                color: data.page >= data.totalPages ? '#9ca3af' : '#111827',
+                border: 'var(--border-control)',
+                borderRadius: 'var(--radius-control)',
+                background: data.page >= data.totalPages ? 'var(--color-surface-disabled)' : 'var(--color-surface-card)',
+                color: data.page >= data.totalPages ? 'var(--color-text-disabled)' : 'var(--color-text-strong)',
                 cursor: data.page >= data.totalPages ? 'not-allowed' : 'pointer',
               }}
             >
