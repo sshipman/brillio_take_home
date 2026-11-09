@@ -54,7 +54,7 @@ const rootRoute = createRootRoute({
       <header style={{ marginBottom: 20, borderBottom: 'var(--border-subtle)', paddingBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 24 }}>Property Listing Search</h1>
         <p style={{ margin: '4px 0 0', color: 'var(--color-text-muted)', fontSize: 14 }}>
-          Filter listings across MLS feeds and rank by budget proximity and recency
+          Filter listings across MLS feeds and rank by budget and recency
         </p>
       </header>
       <Outlet />
@@ -277,6 +277,7 @@ function ListingSearchPage() {
               type="number"
               placeholder="e.g. 400000"
               value={minPrice}
+              min={0}
               aria-invalid={errorFields.includes('minPrice')}
               onChange={(e) => {
                 setMinPrice(e.target.value)
@@ -292,6 +293,7 @@ function ListingSearchPage() {
               type="number"
               placeholder="e.g. 550000"
               value={maxPrice}
+              min={0}
               aria-invalid={errorFields.includes('maxPrice')}
               onChange={(e) => {
                 setMaxPrice(e.target.value)
@@ -307,6 +309,7 @@ function ListingSearchPage() {
               type="number"
               placeholder="e.g. 3"
               value={minBedrooms}
+              min={0}
               aria-invalid={errorFields.includes('minBedrooms')}
               onChange={(e) => {
                 setMinBedrooms(e.target.value)
@@ -352,6 +355,7 @@ function ListingSearchPage() {
               type="number"
               placeholder="e.g. 475000"
               value={targetBudget}
+              min={0}
               aria-invalid={errorFields.includes('targetBudget')}
               onChange={(e) => {
                 setTargetBudget(e.target.value)
@@ -366,6 +370,7 @@ function ListingSearchPage() {
             <input
               type="number"
               value={pageSize}
+              min={1}
               aria-invalid={errorFields.includes('pageSize')}
               onChange={(e) => {
                 setPageSize(e.target.value)
