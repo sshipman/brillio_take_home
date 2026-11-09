@@ -7,6 +7,7 @@ import com.brillio.listings.service.ListingSearchService;
 import com.brillio.listings.service.ScoringService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
+import io.javalin.plugin.bundled.CorsPluginConfig;
 
 import java.time.Clock;
 import java.util.List;
@@ -17,23 +18,17 @@ public class App {
         ScoringService scoringService = new ScoringService(clock);
         ListingSearchService searchService = new ListingSearchService(repository, scoringService);
 
-        Javalin app = Javalin.create(config -> {
-            config.bundledPlugins.enableCors(cors -> cors.addRule(it -> it.anyHost()));
-        });
+        Javalin app = Javalin.create(config -> config.bundledPlugins.enableCors(cors -> cors.addRule(CorsPluginConfig.CorsRule::anyHost)));
 
-        app.exception(ValidationException.class, (e, ctx) -> {
-            ctx.status(400).json(Map.of(
-                "error", e.getMessage(),
-                "fields", e.getFields()
-            ));
-        });
+        app.exception(ValidationException.class, (e, ctx) -> ctx.status(400).json(Map.of(
+            "error", e.getMessage(),
+            "fields", e.getFields()
+        )));
 
-        app.exception(IllegalArgumentException.class, (e, ctx) -> {
-            ctx.status(400).json(Map.of(
-                "error", e.getMessage(),
-                "fields", List.of()
-            ));
-        });
+        app.exception(IllegalArgumentException.class, (e, ctx) -> ctx.status(400).json(Map.of(
+            "error", e.getMessage(),
+            "fields", List.of()
+        )));
 
         app.get("/api/health", ctx -> ctx.json(Map.of("status", "ok")));
 

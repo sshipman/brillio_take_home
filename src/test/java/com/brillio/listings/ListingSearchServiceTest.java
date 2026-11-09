@@ -55,7 +55,7 @@ public class ListingSearchServiceTest {
         assertEquals(12, result.items().size());
 
         // Without targetBudget, most recent listing (A5: 2026-09-04) ranks first
-        assertEquals("A5", result.items().get(0).listing().id());
+        assertEquals("A5", result.items().getFirst().listing().id());
         // Oldest listing (A7: 2026-07-28) ranks last
         assertEquals("A7", result.items().get(11).listing().id());
     }
@@ -158,7 +158,7 @@ public class ListingSearchServiceTest {
         assertEquals(5, page2.items().size());
         assertEquals(2, page3.items().size());
         assertEquals(0, page4.items().size());
-        assertNotEquals(page1.items().get(0).listing().id(), page2.items().get(0).listing().id());
+        assertNotEquals(page1.items().getFirst().listing().id(), page2.items().getFirst().listing().id());
     }
 
     @Test
