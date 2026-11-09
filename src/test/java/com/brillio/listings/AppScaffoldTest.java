@@ -28,11 +28,13 @@ public class AppScaffoldTest {
         try {
             HttpClient client = HttpClient.newHttpClient();
             HttpRequest req = HttpRequest.newBuilder(
-                URI.create("http://127.0.0.1:" + app.port() + "/api/listings")
+                URI.create("http://127.0.0.1:" + app.port() + "/api/listings?pageSize=20")
             ).GET().build();
             HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
             assertEquals(200, resp.statusCode());
             assertTrue(resp.body().contains("\"totalItems\":12"));
+            assertTrue(resp.body().contains("\"address\":\"123 Main St, Apt 4B\""));
+            assertTrue(resp.body().contains("\"relevanceScore\":"));
         } finally {
             app.stop();
             repo.close();
