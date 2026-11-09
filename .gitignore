@@ -18,6 +18,9 @@ frontend/.tanstack/
 *.db-shm
 *.db-wal
 
+### Local Interview Notes ###
+NOTES.md
+
 ### Eclipse ###
 .apt_generated
 .classpath
