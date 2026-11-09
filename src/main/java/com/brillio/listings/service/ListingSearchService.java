@@ -9,7 +9,6 @@ import com.brillio.listings.model.SearchCriteria;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 
 public class ListingSearchService {
     private final SqliteListingRepository repository;
@@ -33,10 +32,9 @@ public class ListingSearchService {
         }
         criteria.validate();
 
-        List<Listing> allListings = repository.findAll();
+        List<Listing> filteredListings = repository.findByCriteria(criteria);
 
-        List<ScoredListing> ranked = allListings.stream()
-            .filter(listing -> matches(listing, criteria))
+        List<ScoredListing> ranked = filteredListings.stream()
             .map(listing -> new ScoredListing(listing, scoringService.score(listing, criteria.targetBudget())))
             .sorted(RANKING_COMPARATOR)
             .toList();
@@ -60,32 +58,5 @@ public class ListingSearchService {
             totalItems,
             totalPages
         );
-    }
-
-    private boolean matches(Listing listing, SearchCriteria criteria) {
-        if (criteria.minPrice() != null && listing.price() < criteria.minPrice()) {
-            return false;
-        }
-        if (criteria.maxPrice() != null && listing.price() > criteria.maxPrice()) {
-            return false;
-        }
-        if (criteria.minBedrooms() != null && listing.bedrooms() < criteria.minBedrooms()) {
-            return false;
-        }
-        if (criteria.city() != null && !criteria.city().isBlank()) {
-            String targetCity = criteria.city().trim().toLowerCase(Locale.ROOT);
-            String listingCity = listing.city() == null ? "" : listing.city().trim().toLowerCase(Locale.ROOT);
-            if (!listingCity.equals(targetCity)) {
-                return false;
-            }
-        }
-        if (criteria.keyword() != null && !criteria.keyword().isBlank()) {
-            String targetKeyword = criteria.keyword().trim().toLowerCase(Locale.ROOT);
-            String description = listing.description() == null ? "" : listing.description().toLowerCase(Locale.ROOT);
-            if (!description.contains(targetKeyword)) {
-                return false;
-            }
-        }
-        return true;
     }
 }

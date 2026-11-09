@@ -55,9 +55,10 @@ Each listing is scored in [`ScoringService`](src/main/java/com/brillio/listings/
 
 ## Key Design Decisions & Trade-Offs
 
-* **SQLite + In-Application Filtering/Scoring:**
+* **SQLite Filtering + In-Application Scoring/Ranking:**
   * Listings are persisted in SQLite (`SqliteListingRepository`) with composite primary key `(source, id)` because `id` is only unique per MLS feed.
-  * Filtering, relevance scoring, and pagination are executed in clean, composable Java methods (`ListingSearchService` + `ScoringService`) rather than embedding decay math in SQLite dialect SQL. For a small dataset, this keeps the domain logic fast, portable, and easy to unit test or extend live (e.g., adding cross-source deduplication, geospatial distance filtering, or status filters).
+  * Filtering (`minPrice`, `maxPrice`, `minBedrooms`, case-insensitive `city`, and `LIKE` description `keyword`) is pushed down into SQLite using parameterized `PreparedStatement` queries (`findByCriteria`).
+  * Relevance scoring (`ScoringService`) and deterministic tie-breaking/pagination (`ListingSearchService`) run in Java over the filtered candidate set so the `Clock`-based exponential recency decay remains clean, portable, and easy to unit-test or extend live.
 * **Deliberate Validation & Error Handling:**
   * Invalid inputs (`minPrice > maxPrice`, negative prices/bedrooms, `targetBudget <= 0`, `page < 1`, `pageSize <= 0`, or non-numeric query params) throw `IllegalArgumentException` and return `HTTP 400 Bad Request` with `{ "error": "..." }`, which the React UI displays in an alert banner.
   * Valid queries that match zero listings (such as an unknown city) return `HTTP 200 OK` with an empty `items` array and `totalItems: 0`, rendered as a dedicated empty-results state in the UI.

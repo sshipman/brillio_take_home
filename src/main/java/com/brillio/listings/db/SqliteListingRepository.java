@@ -1,6 +1,7 @@
 package com.brillio.listings.db;
 
 import com.brillio.listings.model.Listing;
+import com.brillio.listings.model.SearchCriteria;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -13,6 +14,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class SqliteListingRepository {
     private final String jdbcUrl;
@@ -101,29 +103,64 @@ public class SqliteListingRepository {
     }
 
     public List<Listing> findAll() {
+        return findByCriteria(new SearchCriteria(null, null, null, null, null, null, 1, SearchCriteria.MAX_PAGE_SIZE));
+    }
+
+    public List<Listing> findByCriteria(SearchCriteria criteria) {
+        StringBuilder sql = new StringBuilder("SELECT * FROM listings WHERE 1=1");
+        List<Object> params = new ArrayList<>();
+
+        if (criteria.minPrice() != null) {
+            sql.append(" AND price >= ?");
+            params.add(criteria.minPrice());
+        }
+        if (criteria.maxPrice() != null) {
+            sql.append(" AND price <= ?");
+            params.add(criteria.maxPrice());
+        }
+        if (criteria.minBedrooms() != null) {
+            sql.append(" AND bedrooms >= ?");
+            params.add(criteria.minBedrooms());
+        }
+        if (criteria.city() != null && !criteria.city().isBlank()) {
+            sql.append(" AND LOWER(TRIM(city)) = ?");
+            params.add(criteria.city().trim().toLowerCase(Locale.ROOT));
+        }
+        if (criteria.keyword() != null && !criteria.keyword().isBlank()) {
+            String escapedKeyword = criteria.keyword().trim().toLowerCase(Locale.ROOT)
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
+            sql.append(" AND LOWER(description) LIKE ? ESCAPE '\\'");
+            params.add("%" + escapedKeyword + "%");
+        }
+
         List<Listing> results = new ArrayList<>();
-        String sql = "SELECT * FROM listings";
         try (Connection conn = getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                results.add(new Listing(
-                    rs.getString("id"),
-                    rs.getString("source"),
-                    rs.getString("address"),
-                    rs.getString("city"),
-                    rs.getString("state"),
-                    rs.getString("zip"),
-                    rs.getDouble("price"),
-                    rs.getInt("bedrooms"),
-                    rs.getDouble("bathrooms"),
-                    rs.getInt("sqft"),
-                    rs.getDouble("latitude"),
-                    rs.getDouble("longitude"),
-                    rs.getString("listedDate"),
-                    rs.getString("status"),
-                    rs.getString("description")
-                ));
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    results.add(new Listing(
+                        rs.getString("id"),
+                        rs.getString("source"),
+                        rs.getString("address"),
+                        rs.getString("city"),
+                        rs.getString("state"),
+                        rs.getString("zip"),
+                        rs.getDouble("price"),
+                        rs.getInt("bedrooms"),
+                        rs.getDouble("bathrooms"),
+                        rs.getInt("sqft"),
+                        rs.getDouble("latitude"),
+                        rs.getDouble("longitude"),
+                        rs.getString("listedDate"),
+                        rs.getString("status"),
+                        rs.getString("description")
+                    ));
+                }
             }
         } catch (SQLException e) {
             throw new RuntimeException("Failed to query listings from SQLite", e);
