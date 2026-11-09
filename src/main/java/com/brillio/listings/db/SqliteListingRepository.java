@@ -47,13 +47,14 @@ public class SqliteListingRepository {
         )
     """;
 
+    // Use INSTR instead of LIKE so literal '%' and '_' characters in keywords don't require wildcard escaping.
     private static final String FIND_BY_CRITERIA_SQL = """
         SELECT * FROM listings
         WHERE (:minPrice IS NULL OR price >= :minPrice)
           AND (:maxPrice IS NULL OR price <= :maxPrice)
           AND (:minBedrooms IS NULL OR bedrooms >= :minBedrooms)
           AND (:city IS NULL OR LOWER(TRIM(city)) = :city)
-          AND (:keywordPattern IS NULL OR LOWER(description) LIKE :keywordPattern ESCAPE '\\')
+          AND (:keyword IS NULL OR INSTR(LOWER(description), :keyword) > 0)
     """;
 
     private final String jdbcUrl;
@@ -108,23 +109,17 @@ public class SqliteListingRepository {
             ? null
             : criteria.city().trim().toLowerCase(Locale.ROOT);
 
-        String keywordPattern = null;
-        if (criteria.keyword() != null && !criteria.keyword().isBlank()) {
-            String escaped = criteria.keyword().trim().toLowerCase(Locale.ROOT)
-                .replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_");
-            keywordPattern = "%" + escaped + "%";
-        }
+        String normalizedKeyword = (criteria.keyword() == null || criteria.keyword().isBlank())
+            ? null
+            : criteria.keyword().trim().toLowerCase(Locale.ROOT);
 
-        String finalKeywordPattern = keywordPattern;
         return jdbi.withHandle(handle ->
             handle.createQuery(FIND_BY_CRITERIA_SQL)
                 .bind("minPrice", criteria.minPrice())
                 .bind("maxPrice", criteria.maxPrice())
                 .bind("minBedrooms", criteria.minBedrooms())
                 .bind("city", normalizedCity)
-                .bind("keywordPattern", finalKeywordPattern)
+                .bind("keyword", normalizedKeyword)
                 .mapTo(Listing.class)
                 .list()
         );
