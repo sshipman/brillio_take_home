@@ -4,24 +4,66 @@ import com.brillio.listings.model.Listing;
 import com.brillio.listings.model.SearchCriteria;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.mapper.reflect.ConstructorMapper;
+import org.jdbi.v3.core.statement.PreparedBatch;
 
 import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 public class SqliteListingRepository {
+    private static final String CREATE_TABLE_SQL = """
+        CREATE TABLE IF NOT EXISTS listings (
+            id TEXT NOT NULL,
+            source TEXT NOT NULL,
+            address TEXT NOT NULL,
+            city TEXT NOT NULL,
+            state TEXT NOT NULL,
+            zip TEXT NOT NULL,
+            price REAL NOT NULL,
+            bedrooms INTEGER NOT NULL,
+            bathrooms REAL NOT NULL,
+            sqft INTEGER NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            listedDate TEXT NOT NULL,
+            status TEXT NOT NULL,
+            description TEXT NOT NULL,
+            PRIMARY KEY (source, id)
+        )
+    """;
+
+    private static final String UPSERT_SQL = """
+        INSERT OR REPLACE INTO listings (
+            id, source, address, city, state, zip, price, bedrooms, bathrooms,
+            sqft, latitude, longitude, listedDate, status, description
+        ) VALUES (
+            :id, :source, :address, :city, :state, :zip, :price, :bedrooms, :bathrooms,
+            :sqft, :latitude, :longitude, :listedDate, :status, :description
+        )
+    """;
+
+    private static final String FIND_BY_CRITERIA_SQL = """
+        SELECT * FROM listings
+        WHERE (:minPrice IS NULL OR price >= :minPrice)
+          AND (:maxPrice IS NULL OR price <= :maxPrice)
+          AND (:minBedrooms IS NULL OR bedrooms >= :minBedrooms)
+          AND (:city IS NULL OR LOWER(TRIM(city)) = :city)
+          AND (:keywordPattern IS NULL OR LOWER(description) LIKE :keywordPattern ESCAPE '\\')
+    """;
+
     private final String jdbcUrl;
+    private final Jdbi jdbi;
     private Connection keepAliveConnection;
 
     public SqliteListingRepository(String jdbcUrl) {
         this.jdbcUrl = jdbcUrl;
+        this.jdbi = Jdbi.create(jdbcUrl);
+        this.jdbi.registerRowMapper(ConstructorMapper.factory(Listing.class));
     }
 
     public void initializeAndSeed(String resourcePath) {
@@ -30,29 +72,7 @@ public class SqliteListingRepository {
             if (jdbcUrl.contains(":memory:") || jdbcUrl.contains("mode=memory")) {
                 keepAliveConnection = DriverManager.getConnection(jdbcUrl);
             }
-            try (Connection conn = getConnection();
-                 Statement stmt = conn.createStatement()) {
-                stmt.execute("""
-                    CREATE TABLE IF NOT EXISTS listings (
-                        id TEXT NOT NULL,
-                        source TEXT NOT NULL,
-                        address TEXT NOT NULL,
-                        city TEXT NOT NULL,
-                        state TEXT NOT NULL,
-                        zip TEXT NOT NULL,
-                        price REAL NOT NULL,
-                        bedrooms INTEGER NOT NULL,
-                        bathrooms REAL NOT NULL,
-                        sqft INTEGER NOT NULL,
-                        latitude REAL NOT NULL,
-                        longitude REAL NOT NULL,
-                        listedDate TEXT NOT NULL,
-                        status TEXT NOT NULL,
-                        description TEXT NOT NULL,
-                        PRIMARY KEY (source, id)
-                    )
-                """);
-            }
+            jdbi.useHandle(handle -> handle.execute(CREATE_TABLE_SQL));
 
             if (resourcePath != null) {
                 ObjectMapper mapper = new ObjectMapper();
@@ -69,37 +89,14 @@ public class SqliteListingRepository {
         }
     }
 
-    public void saveAll(List<Listing> listings) throws SQLException {
-        String sql = """
-            INSERT OR REPLACE INTO listings (
-                id, source, address, city, state, zip, price, bedrooms, bathrooms,
-                sqft, latitude, longitude, listedDate, status, description
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """;
-        try (Connection conn = getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            conn.setAutoCommit(false);
-            for (Listing l : listings) {
-                ps.setString(1, l.id());
-                ps.setString(2, l.source());
-                ps.setString(3, l.address());
-                ps.setString(4, l.city());
-                ps.setString(5, l.state());
-                ps.setString(6, l.zip());
-                ps.setDouble(7, l.price());
-                ps.setInt(8, l.bedrooms());
-                ps.setDouble(9, l.bathrooms());
-                ps.setInt(10, l.sqft());
-                ps.setDouble(11, l.latitude());
-                ps.setDouble(12, l.longitude());
-                ps.setString(13, l.listedDate());
-                ps.setString(14, l.status());
-                ps.setString(15, l.description());
-                ps.addBatch();
+    public void saveAll(List<Listing> listings) {
+        jdbi.useTransaction(handle -> {
+            PreparedBatch batch = handle.prepareBatch(UPSERT_SQL);
+            for (Listing listing : listings) {
+                batch.bindMethods(listing).add();
             }
-            ps.executeBatch();
-            conn.commit();
-        }
+            batch.execute();
+        });
     }
 
     public List<Listing> findAll() {
@@ -107,69 +104,30 @@ public class SqliteListingRepository {
     }
 
     public List<Listing> findByCriteria(SearchCriteria criteria) {
-        StringBuilder sql = new StringBuilder("SELECT * FROM listings WHERE 1=1");
-        List<Object> params = new ArrayList<>();
+        String normalizedCity = (criteria.city() == null || criteria.city().isBlank())
+            ? null
+            : criteria.city().trim().toLowerCase(Locale.ROOT);
 
-        if (criteria.minPrice() != null) {
-            sql.append(" AND price >= ?");
-            params.add(criteria.minPrice());
-        }
-        if (criteria.maxPrice() != null) {
-            sql.append(" AND price <= ?");
-            params.add(criteria.maxPrice());
-        }
-        if (criteria.minBedrooms() != null) {
-            sql.append(" AND bedrooms >= ?");
-            params.add(criteria.minBedrooms());
-        }
-        if (criteria.city() != null && !criteria.city().isBlank()) {
-            sql.append(" AND LOWER(TRIM(city)) = ?");
-            params.add(criteria.city().trim().toLowerCase(Locale.ROOT));
-        }
+        String keywordPattern = null;
         if (criteria.keyword() != null && !criteria.keyword().isBlank()) {
-            String escapedKeyword = criteria.keyword().trim().toLowerCase(Locale.ROOT)
+            String escaped = criteria.keyword().trim().toLowerCase(Locale.ROOT)
                 .replace("\\", "\\\\")
                 .replace("%", "\\%")
                 .replace("_", "\\_");
-            sql.append(" AND LOWER(description) LIKE ? ESCAPE '\\'");
-            params.add("%" + escapedKeyword + "%");
+            keywordPattern = "%" + escaped + "%";
         }
 
-        List<Listing> results = new ArrayList<>();
-        try (Connection conn = getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
-            for (int i = 0; i < params.size(); i++) {
-                ps.setObject(i + 1, params.get(i));
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    results.add(new Listing(
-                        rs.getString("id"),
-                        rs.getString("source"),
-                        rs.getString("address"),
-                        rs.getString("city"),
-                        rs.getString("state"),
-                        rs.getString("zip"),
-                        rs.getDouble("price"),
-                        rs.getInt("bedrooms"),
-                        rs.getDouble("bathrooms"),
-                        rs.getInt("sqft"),
-                        rs.getDouble("latitude"),
-                        rs.getDouble("longitude"),
-                        rs.getString("listedDate"),
-                        rs.getString("status"),
-                        rs.getString("description")
-                    ));
-                }
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to query listings from SQLite", e);
-        }
-        return results;
-    }
-
-    private Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(jdbcUrl);
+        String finalKeywordPattern = keywordPattern;
+        return jdbi.withHandle(handle ->
+            handle.createQuery(FIND_BY_CRITERIA_SQL)
+                .bind("minPrice", criteria.minPrice())
+                .bind("maxPrice", criteria.maxPrice())
+                .bind("minBedrooms", criteria.minBedrooms())
+                .bind("city", normalizedCity)
+                .bind("keywordPattern", finalKeywordPattern)
+                .mapTo(Listing.class)
+                .list()
+        );
     }
 
     public void close() {
