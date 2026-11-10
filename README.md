@@ -1,14 +1,20 @@
 # Property Listing Search Service
 
-A full-stack property listing search application built with **Java 21 (Javalin + SQLite)** on the backend and **React + TypeScript (Vite + TanStack Router)** on the frontend.
+A full-stack property listing search application built with **Java 21 (Javalin + Jdbi 3 + SQLite)** on the backend and **React + TypeScript (Vite + TanStack Router + Leaflet)** on the frontend.
 
 ---
 
 ## Running the Application
 
-### 1. Run Backend Tests
+### 1. Run Backend & Frontend Tests
 ```bash
+# Backend JUnit 5 test suite
 ./gradlew test
+
+# Frontend Vitest + React Testing Library suite
+cd frontend
+npm install
+npm test
 ```
 
 ### 2. Start the Backend API Server (Port 8080)
@@ -55,12 +61,17 @@ Each listing is scored in [`ScoringService`](src/main/java/com/brillio/listings/
 
 ## Key Design Decisions & Trade-Offs
 
-* **SQLite Filtering + In-Application Scoring/Ranking:**
+* **SQLite Filtering (Jdbi 3) + In-Application Scoring/Ranking:**
   * Listings are persisted in SQLite (`SqliteListingRepository`) with composite primary key `(source, id)` because `id` is only unique per MLS feed.
-  * Filtering (`minPrice`, `maxPrice`, `minBedrooms`, case-insensitive `city`, and `LIKE` description `keyword`) is pushed down into SQLite using parameterized `PreparedStatement` queries (`findByCriteria`).
+  * Filtering (`minPrice`, `maxPrice`, `minBedrooms`, case-insensitive `city`, and literal substring `INSTR` matching on `description`) is pushed down into SQLite using static named-parameter queries via Jdbi 3 (`findByCriteria`).
   * Relevance scoring (`ScoringService`) and deterministic tie-breaking/pagination (`ListingSearchService`) run in Java over the filtered candidate set so the `Clock`-based exponential recency decay remains clean, portable, and easy to unit-test or extend live.
-* **Deliberate Validation & Error Handling:**
-  * Invalid inputs (`minPrice > maxPrice`, negative prices/bedrooms, `targetBudget <= 0`, `page < 1`, `pageSize <= 0`, or non-numeric query params) throw `IllegalArgumentException` and return `HTTP 400 Bad Request` with `{ "error": "..." }`, which the React UI displays in an alert banner.
+* **Deliberate Validation & Field-Level Error Highlighting:**
+  * Invalid inputs (`minPrice > maxPrice`, negative prices/bedrooms, `targetBudget <= 0`, `page < 1`, `pageSize <= 0`, or non-numeric query params) throw `ValidationException` and return `HTTP 400 Bad Request` with `{ "error": "...", "fields": [...] }`. The React UI displays an alert banner and highlights the specific offending input fields.
   * Valid queries that match zero listings (such as an unknown city) return `HTTP 200 OK` with an empty `items` array and `totalItems: 0`, rendered as a dedicated empty-results state in the UI.
+* **Interactive Map & Co-Located Source Grouping (Leaflet + OpenStreetMap):**
+  * Search results are displayed alongside an interactive OpenStreetMap view (`ListingsMap.tsx`) with zero API keys required.
+  * Listings sharing identical coordinates across multiple MLS feeds are grouped into a single map pin displaying the lowest price and source count, with bidirectional selection between map pins and listing cards (`ListingCard.tsx` / `ListingsPane.tsx`).
 * **URL-Driven Frontend State (TanStack Router):**
   * All search filters and pagination parameters (`minPrice`, `maxPrice`, `minBedrooms`, `city`, `keyword`, `targetBudget`, `page`, `pageSize`) are stored in validated URL search parameters via `@tanstack/react-router`.
+* **Additional Design Notes:**
+  * See [`NOTES.md`](NOTES.md) for further analysis of cross-source price discrepancies, non-linear price slider scaling, and localization (i18n/l10n) strategies.
