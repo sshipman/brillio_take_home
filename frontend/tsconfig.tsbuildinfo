@@ -1,1 +1,1 @@
-{"root":["./src/main.tsx"],"version":"5.6.3"}
+{"root":["./src/ListingCard.tsx","./src/ListingsMap.tsx","./src/ListingsPane.tsx","./src/ListingsSearch.test.tsx","./src/main.tsx"],"version":"5.6.3"}

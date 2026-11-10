@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import {
   RouterProvider,
@@ -9,6 +9,8 @@ import {
   useNavigate,
 } from '@tanstack/react-router'
 import './styles.css'
+import { ListingsMap } from './ListingsMap'
+import { ListingsPane } from './ListingsPane'
 
 export interface ScoredListing {
   id: string
@@ -50,8 +52,8 @@ export interface ListingSearchParams {
 
 const rootRoute = createRootRoute({
   component: () => (
-    <div style={{ fontFamily: 'var(--font-family-base)', maxWidth: 1024, margin: '0 auto', padding: 24, color: 'var(--color-text-primary)' }}>
-      <header style={{ marginBottom: 20, borderBottom: 'var(--border-subtle)', paddingBottom: 12 }}>
+    <div style={{ fontFamily: 'var(--font-family-base)', maxWidth: 1360, margin: '0 auto', padding: 20, color: 'var(--color-text-primary)' }}>
+      <header style={{ marginBottom: 16, borderBottom: 'var(--border-subtle)', paddingBottom: 10 }}>
         <h1 style={{ margin: 0, fontSize: 24 }}>Property Listing Search</h1>
         <p style={{ margin: '4px 0 0', color: 'var(--color-text-muted)', fontSize: 14 }}>
           Filter listings across MLS feeds and rank by budget and recency
@@ -111,6 +113,31 @@ function ListingSearchPage() {
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const [errorFields, setErrorFields] = useState<string[]>([])
+  const [activeListingKeys, setActiveListingKeys] = useState<string[]>([])
+  const [selectedListingKey, setSelectedListingKey] = useState<string | null>(null)
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  const handleSelectFromMap = (keys: string[], source: 'map' | 'card') => {
+    setActiveListingKeys(keys)
+    if (keys.length === 0) {
+      setSelectedListingKey(null)
+      return
+    }
+    // Only auto-scroll the listing card into view when the pin was clicked on the map
+    // AND the viewport is wide enough (>= 860px) that the listings pane scrolls independently of the map.
+    if (source === 'map' && window.matchMedia('(min-width: 860px)').matches) {
+      const firstCard = cardRefs.current.get(keys[0])
+      firstCard?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }
+
+  const registerCardRef = (listingKey: string, el: HTMLDivElement | null) => {
+    if (el) {
+      cardRefs.current.set(listingKey, el)
+    } else {
+      cardRefs.current.delete(listingKey)
+    }
+  }
 
   const clearFieldError = (fieldName: string) => {
     setErrorFields((prev) => (prev.includes(fieldName) ? prev.filter((f) => f !== fieldName) : prev))
@@ -140,6 +167,8 @@ function ListingSearchPage() {
       setLoading(true)
       setError(null)
       setErrorFields([])
+      setActiveListingKeys([])
+      setSelectedListingKey(null)
       try {
         const params = new URLSearchParams()
         if (search.minPrice) params.set('minPrice', search.minPrice)
@@ -338,7 +367,7 @@ function ListingSearchPage() {
             Description Keyword
             <input
               type="text"
-              placeholder="e.g. metro, fenced"
+              placeholder="e.g. school"
               value={keyword}
               aria-invalid={errorFields.includes('keyword')}
               onChange={(e) => {
@@ -350,12 +379,12 @@ function ListingSearchPage() {
           </label>
 
           <label style={getLabelStyle('targetBudget')}>
-            Target Budget ($ - Ranking)
+            Target Budget
             <input
               type="number"
               placeholder="e.g. 475000"
               value={targetBudget}
-              min={0}
+              min={1}
               aria-invalid={errorFields.includes('targetBudget')}
               onChange={(e) => {
                 setTargetBudget(e.target.value)
@@ -453,141 +482,30 @@ function ListingSearchPage() {
       )}
 
       {!loading && !error && data && data.items.length > 0 && (
-        <div>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 12,
-              fontSize: 14,
-              color: 'var(--color-text-muted)',
-            }}
-          >
-            <span>
-              Showing <strong>{data.items.length}</strong> of <strong>{data.totalItems}</strong> matching listings
-              (Page <strong>{data.page}</strong> of <strong>{data.totalPages}</strong>)
-            </span>
+        <div className="results-split-layout">
+          <div className="map-pane" aria-label="Property locations map">
+            <ListingsMap
+              listings={data.items}
+              selectedListingKey={selectedListingKey}
+              onSelectListings={handleSelectFromMap}
+            />
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {data.items.map((item) => (
-              <div
-                key={`${item.source}-${item.id}`}
-                style={{
-                  border: 'var(--border-subtle)',
-                  borderRadius: 'var(--radius-panel)',
-                  padding: 14,
-                  background: 'var(--color-surface-card)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-                  <div>
-                    <strong style={{ fontSize: 17 }}>{item.address}</strong>
-                    <span style={{ marginLeft: 8, color: 'var(--color-text-muted)', fontSize: 14 }}>
-                      {item.city}, {item.state} {item.zip}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text-strong)' }}>
-                      ${item.price.toLocaleString()}
-                    </span>
-                    <span
-                      style={{
-                        background: 'var(--color-badge-bg)',
-                        color: 'var(--color-badge-text)',
-                        border: 'var(--border-badge)',
-                        borderRadius: 'var(--radius-control)',
-                        padding: '2px 8px',
-                        fontSize: 13,
-                        fontWeight: 600,
-                      }}
-                    >
-                      Score: {item.relevanceScore.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 8, fontSize: 13, color: 'var(--color-text-secondary)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                  <span>
-                    <strong>Bedrooms:</strong> {item.bedrooms}
-                  </span>
-                  <span>
-                    <strong>Bathrooms:</strong> {item.bathrooms}
-                  </span>
-                  <span>
-                    <strong>Sqft:</strong> {item.sqft.toLocaleString()}
-                  </span>
-                  <span>
-                    <strong>Listed:</strong> {item.listedDate}
-                  </span>
-                  <span>
-                    <strong>Status:</strong> {item.status}
-                  </span>
-                  <span>
-                    <strong>Source:</strong> {item.source} ({item.id})
-                  </span>
-                </div>
-
-                <p style={{ margin: '8px 0 0', fontSize: 14, color: 'var(--color-text-muted)' }}>{item.description}</p>
-              </div>
-            ))}
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginTop: 16,
-              paddingTop: 12,
-              borderTop: 'var(--border-subtle)',
-            }}
-          >
-            <button
-              type="button"
-              disabled={data.page <= 1}
-              onClick={() => goToPage(data.page - 1)}
-              style={{
-                padding: '6px 14px',
-                border: 'var(--border-control)',
-                borderRadius: 'var(--radius-control)',
-                background: data.page <= 1 ? 'var(--color-surface-disabled)' : 'var(--color-surface-card)',
-                color: data.page <= 1 ? 'var(--color-text-disabled)' : 'var(--color-text-strong)',
-                cursor: data.page <= 1 ? 'not-allowed' : 'pointer',
-              }}
-            >
-              Previous Page
-            </button>
-
-            <span style={{ fontSize: 14 }}>
-              Page <strong>{data.page}</strong> of <strong>{data.totalPages}</strong>
-            </span>
-
-            <button
-              type="button"
-              disabled={data.page >= data.totalPages}
-              onClick={() => goToPage(data.page + 1)}
-              style={{
-                padding: '6px 14px',
-                border: 'var(--border-control)',
-                borderRadius: 'var(--radius-control)',
-                background: data.page >= data.totalPages ? 'var(--color-surface-disabled)' : 'var(--color-surface-card)',
-                color: data.page >= data.totalPages ? 'var(--color-text-disabled)' : 'var(--color-text-strong)',
-                cursor: data.page >= data.totalPages ? 'not-allowed' : 'pointer',
-              }}
-            >
-              Next Page
-            </button>
-          </div>
+          <ListingsPane
+            data={data}
+            activeListingKeys={activeListingKeys}
+            onSelectListing={setSelectedListingKey}
+            onGoToPage={goToPage}
+            registerCardRef={registerCardRef}
+          />
         </div>
       )}
     </div>
   )
 }
 
-const routeTree = rootRoute.addChildren([indexRoute])
-const router = createRouter({ routeTree })
+export const routeTree = rootRoute.addChildren([indexRoute])
+export const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {
   interface Register {
@@ -595,8 +513,11 @@ declare module '@tanstack/react-router' {
   }
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <RouterProvider router={router} />
-  </React.StrictMode>
-)
+const rootElement = document.getElementById('root')
+if (rootElement) {
+  ReactDOM.createRoot(rootElement).render(
+    <React.StrictMode>
+      <RouterProvider router={router} />
+    </React.StrictMode>
+  )
+}
